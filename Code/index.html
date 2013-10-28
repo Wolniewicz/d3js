@@ -1,10 +1,10 @@
 ﻿<!DOCTYPE html>
 <meta charset="utf-8">
+<title>Streamgraph</title>
 <style>
     body {
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
         margin: auto;
-        padding-top: 40px;
         position: relative;
         width: 960px;
     }
@@ -14,105 +14,75 @@
         right: 10px;
         top: 10px;
     }
-
-    .bullet {
-        font: 10px sans-serif;
-    }
-
-        .bullet .marker {
-            stroke: #000;
-            stroke-width: 2px;
-        }
-
-        .bullet .tick line {
-            stroke: #666;
-            stroke-width: .5px;
-        }
-
-        .bullet .range.s0 {
-            fill: #eee;
-        }
-
-        .bullet .range.s1 {
-            fill: #ddd;
-        }
-
-        .bullet .range.s2 {
-            fill: #ccc;
-        }
-
-        .bullet .measure.s0 {
-            fill: lightsteelblue;
-        }
-
-        .bullet .measure.s1 {
-            fill: steelblue;
-        }
-
-        .bullet .title {
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .bullet .subtitle {
-            fill: #999;
-        }
 </style>
-<button>Update</button>
+<button onclick="transition()">Update</button>
 <script src="http://d3js.org/d3.v3.min.js"></script>
-<script src="bullet.js"></script>
 <script>
 
-    var margin = { top: 5, right: 40, bottom: 20, left: 120 },
-        width = 960 - margin.left - margin.right,
-        height = 50 - margin.top - margin.bottom;
+    var n = 20, // number of layers
+        m = 200, // number of samples per layer
+        stack = d3.layout.stack().offset("wiggle"),
+        layers0 = stack(d3.range(n).map(function () { return bumpLayer(m); })),
+        layers1 = stack(d3.range(n).map(function () { return bumpLayer(m); }));
 
-    var chart = d3.bullet()
-        .width(width)
-        .height(height);
+    var width = 960,
+        height = 500;
 
-    d3.json("bullets.json", function (error, data) {
-        var svg = d3.select("body").selectAll("svg")
-            .data(data)
-          .enter().append("svg")
-            .attr("class", "bullet")
-            .attr("width", width + margin.left + margin.right)
-            .attr("height", height + margin.top + margin.bottom)
-          .append("g")
-            .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
-            .call(chart);
+    var x = d3.scale.linear()
+        .domain([0, m - 1])
+        .range([0, width]);
 
-        var title = svg.append("g")
-            .style("text-anchor", "end")
-            .attr("transform", "translate(-6," + height / 2 + ")");
+    var y = d3.scale.linear()
+        .domain([0, d3.max(layers0.concat(layers1), function (layer) { return d3.max(layer, function (d) { return d.y0 + d.y; }); })])
+        .range([height, 0]);
 
-        title.append("text")
-            .attr("class", "title")
-            .text(function (d) { return d.title; });
+    var color = d3.scale.linear()
+        .range(["#aad", "#556"]);
 
-        title.append("text")
-            .attr("class", "subtitle")
-            .attr("dy", "1em")
-            .text(function (d) { return d.subtitle; });
+    var area = d3.svg.area()
+        .x(function (d) { return x(d.x); })
+        .y0(function (d) { return y(d.y0); })
+        .y1(function (d) { return y(d.y0 + d.y); });
 
-        d3.selectAll("button").on("click", function () {
-            svg.datum(randomize).call(chart.duration(1000)); // TODO automatic transition
-        });
-    });
+    var svg = d3.select("body").append("svg")
+        .attr("width", width)
+        .attr("height", height);
 
-    function randomize(d) {
-        if (!d.randomizer) d.randomizer = randomizer(d);
-        d.ranges = d.ranges.map(d.randomizer);
-        d.markers = d.markers.map(d.randomizer);
-        d.measures = d.measures.map(d.randomizer);
-        return d;
+    svg.selectAll("path")
+        .data(layers0)
+      .enter().append("path")
+        .attr("d", area)
+        .style("fill", function () { return color(Math.random()); });
+
+    function transition() {
+        d3.selectAll("path")
+            .data(function () {
+                var d = layers1;
+                layers1 = layers0;
+                return layers0 = d;
+            })
+          .transition()
+            .duration(2500)
+            .attr("d", area);
     }
 
-    function randomizer(d) {
-        var k = d3.max(d.ranges) * .2;
-        return function (d) {
-            return Math.max(0, d + k * (Math.random() - .5));
-        };
+    // Inspired by Lee Byron's test data generator.
+    function bumpLayer(n) {
+
+        function bump(a) {
+            var x = 1 / (.1 + Math.random()),
+                y = 2 * Math.random() - .5,
+                z = 10 / (.1 + Math.random());
+            for (var i = 0; i < n; i++) {
+                var w = (i / n - y) * z;
+                a[i] += x * Math.exp(-w * w);
+            }
+        }
+
+        var a = [], i;
+        for (i = 0; i < n; ++i) a[i] = 0;
+        for (i = 0; i < 5; ++i) bump(a);
+        return a.map(function (d, i) { return { x: i, y: Math.max(0, d) }; });
     }
 
 </script>
